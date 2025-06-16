@@ -1,7 +1,8 @@
 import UIKit
 
 protocol CommunityCardButtonDelegate: AnyObject {
-    func communityCardButton(_ button: CommunityCardButton, didSelectCard card: String)
+    func communityCardButton(_ button: CommunityCardButton, didSelectCard card: String) -> Bool
+    func getUnavailableCards(for button: CommunityCardButton) -> Set<String>
 }
 
 class CommunityCardButton: UIButton {
@@ -9,6 +10,11 @@ class CommunityCardButton: UIButton {
     private var selectedCard: String = "-"
     private let values = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
     private let suits = ["♠️", "♥️", "♦️", "♣️"]
+    var isHoleCard: Bool = false {
+        didSet {
+            backgroundColor = isHoleCard ? UIColor.systemBlue.withAlphaComponent(0.15) : .systemGray6
+        }
+    }
     
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -21,7 +27,7 @@ class CommunityCardButton: UIButton {
     }
     
     private func setup() {
-        backgroundColor = .systemGray6
+        backgroundColor = isHoleCard ? UIColor.systemBlue.withAlphaComponent(0.15) : .systemGray6
         layer.cornerRadius = 8
         titleLabel?.font = .systemFont(ofSize: 24, weight: .bold)
         setTitle("-", for: .normal)
@@ -39,6 +45,11 @@ class CommunityCardButton: UIButton {
         cardPickerVC.selectedCard = selectedCard
         cardPickerVC.delegate = self
         
+        // Получаем список недоступных карт от делегата
+        if let delegate = delegate {
+            cardPickerVC.unavailableCards = delegate.getUnavailableCards(for: self)
+        }
+        
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let viewController = windowScene.windows.first?.rootViewController {
             viewController.present(cardPickerVC, animated: true)
@@ -46,9 +57,24 @@ class CommunityCardButton: UIButton {
     }
     
     func setCard(_ card: String) {
-        selectedCard = card
-        setTitle(card, for: .normal)
-        delegate?.communityCardButton(self, didSelectCard: card)
+        let oldCard = selectedCard
+        
+        // Попытка установить новую карту
+        if let delegate = delegate {
+            if delegate.communityCardButton(self, didSelectCard: card) {
+                // Делегат подтвердил выбор, устанавливаем карту
+                selectedCard = card
+                setTitle(card, for: .normal)
+            } else {
+                // Делегат отклонил выбор, возвращаем старую карту
+                selectedCard = oldCard
+                setTitle(oldCard, for: .normal)
+            }
+        } else {
+            // Нет делегата, устанавливаем без проверки
+            selectedCard = card
+            setTitle(card, for: .normal)
+        }
     }
     
     var currentCard: String {
@@ -60,6 +86,7 @@ class CommunityCardButton: UIButton {
 class CardPickerViewController: UIViewController {
     weak var delegate: CommunityCardButton?
     var selectedCard: String = "-"
+    var unavailableCards: Set<String> = []
     
     private let values = ["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
     private let suits = ["♠️", "♥️", "♦️", "♣️"]
@@ -79,6 +106,16 @@ class CardPickerViewController: UIViewController {
         // Настройка контейнера
         containerView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(containerView)
+        
+        // Информационный лейбл
+        let infoLabel = UILabel()
+        infoLabel.text = "Выберите карту. Перечеркнутые карты уже используются."
+        infoLabel.font = .systemFont(ofSize: 14)
+        infoLabel.textColor = .secondaryLabel
+        infoLabel.textAlignment = .center
+        infoLabel.numberOfLines = 0
+        infoLabel.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(infoLabel)
         
         // Настройка ScrollView
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -105,7 +142,11 @@ class CardPickerViewController: UIViewController {
             containerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             containerView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
             
-            scrollView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 16),
+            infoLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 16),
+            infoLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 16),
+            infoLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
+            
+            scrollView.topAnchor.constraint(equalTo: infoLabel.bottomAnchor, constant: 16),
             scrollView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -16),
@@ -140,7 +181,41 @@ class CardPickerViewController: UIViewController {
             let button = UIButton(type: .system)
             button.setTitle(value, for: .normal)
             button.titleLabel?.font = .systemFont(ofSize: 28, weight: .bold)
-            button.backgroundColor = .systemGray5
+            
+            // Проверяем доступность карты
+            let isAvailable = !unavailableCards.contains(value)
+            if isAvailable {
+                button.backgroundColor = .systemGray5
+                button.setTitleColor(.label, for: .normal)
+                button.alpha = 1.0
+                button.isEnabled = true
+            } else {
+                button.backgroundColor = .systemGray2
+                button.setTitleColor(.systemGray, for: .normal)
+                button.alpha = 0.5
+                button.isEnabled = false
+                
+                // Добавляем визуальную индикацию недоступности
+                button.layer.borderWidth = 2
+                button.layer.borderColor = UIColor.systemRed.cgColor
+                
+                // Добавляем перечеркивание
+                let strikeView = UIView()
+                strikeView.backgroundColor = .systemRed
+                strikeView.translatesAutoresizingMaskIntoConstraints = false
+                button.addSubview(strikeView)
+                
+                NSLayoutConstraint.activate([
+                    strikeView.centerXAnchor.constraint(equalTo: button.centerXAnchor),
+                    strikeView.centerYAnchor.constraint(equalTo: button.centerYAnchor),
+                    strikeView.widthAnchor.constraint(equalTo: button.widthAnchor, multiplier: 0.8),
+                    strikeView.heightAnchor.constraint(equalToConstant: 3)
+                ])
+                
+                // Поворачиваем полосу под углом
+                strikeView.transform = CGAffineTransform(rotationAngle: .pi / 4)
+            }
+            
             button.layer.cornerRadius = 12
             button.addTarget(self, action: #selector(cardSelected(_:)), for: .touchUpInside)
             

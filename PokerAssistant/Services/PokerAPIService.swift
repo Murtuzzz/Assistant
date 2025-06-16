@@ -15,7 +15,7 @@ struct APIResponse: Codable {
 class PokerAPIService {
     // Используйте ваш OpenRouter API-ключ
     private let baseURL = "https://openrouter.ai/api/v1/chat/completions"
-    private let apiKey = "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" // <-- Вставьте сюда ваш OpenRouter API-ключ
+    private let apiKey = "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" // <-- Вставьте сюда ваш OpenRouter API-ключ
     
     func getRecommendation(for hand: PokerHandModel) async throws -> APIResponse {
         guard let url = URL(string: baseURL) else {
@@ -31,7 +31,7 @@ class PokerAPIService {
         let body: [String: Any] = [ //-0528
             "model": "deepseek/deepseek-r1:free",
             "messages": [
-                ["role": "system", "content": "Ты — покерный ассистент. Дай совет по раздаче. Ответь только одним словом (check, bet, raise, fold) и коротким объяснением на русском языке."],
+                ["role": "system", "content": "Ты — покерный ассистент. Дай совет по раздаче. Ответь только одним словом (check, bet, call, raise, fold) и коротким объяснением на русском языке."],
                 ["role": "user", "content": hand.toUserPrompt()]
             ],
             "stream": false
